@@ -16,12 +16,29 @@ MCUFRIEND_kbv tft;
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
 
+// --- CONSTANTES DE LAYOUT (UI) ---
+const int PADDING_X       = 10;
+const int PADDING_Y       = 10;
+const int LINE_HEIGHT     = 25; 
+const int BTN_INFO_Y      = 110; 
+const int TITLE_X         = 30;
+const int TITLE_Y         = 40;
+const int SUBTITLE_Y      = 90;
+const int SCORE_BAR_H     = 20; 
+const int SCORE_TEXT_Y    = 0;
+const int QUESTION_START_Y = 70;
+const int OPTION_SPACING   = 50; 
+
 // Regras do jogo
 #define MAX_PLAYERS       3
 #define NUM_QUESTOES      35
 #define PONTOS_ACERTO     5
 #define PONTOS_VITORIA    50
 #define INTERVALO_EVENTO_MS (5UL * 60UL * 1000UL)  // 5 minutos
+
+// Variaveis de Heartbeat (Sincronização)
+unsigned long lastHeartbeat = 0;
+const unsigned long HEARTBEAT_INTERVAL = 2000; // 2 segundos
 
 // ---------- PERSONAGENS (somente nomes, em PROGMEM) ----------
 const char pn0[] PROGMEM = "Mr Ducks";
@@ -38,8 +55,6 @@ const char* const personagemNomes[] PROGMEM = {
 };
 
 // ---------- PERGUNTAS (35) EM PROGMEM ----------
-// Formato: "Pergunta|A) ...|B) ...|C) ..."
-
 const char q0[]  PROGMEM = "Reuniao de alinhamento inesperada|A) Explicar rapidamente os pontos principais|B) Preparar apresentacao detalhada e longa|C) Deixar o colega da esquerda falar sozinho";
 const char q1[]  PROGMEM = "Email de cliente confuso|A) Responder de forma educada e clara|B) Ignorar ate alguem reclamar|C) Responder com irritacao";
 const char q2[]  PROGMEM = "Conflito interno sobre prioridades|A) Mediar conversa buscando acordo|B) Forcar sua ideia sem ouvir ninguem|C) Sair da discussao e deixar rolar";
@@ -50,7 +65,6 @@ const char q6[]  PROGMEM = "Feedback ambiguo do gerente|A) Perguntar o que exata
 const char q7[]  PROGMEM = "Apresentacao que deu errado|A) Refazer destacando resultados e aprendizados|B) Culpar a equipe em publico|C) Esconder os erros nos proximos relatorios";
 const char q8[]  PROGMEM = "Desalinhamento entre times|A) Marcar chamada rapida com todos|B) Deixar cada time trabalhar isolado|C) Mandar email passivo agressivo";
 const char q9[]  PROGMEM = "Cliente pede detalhamento urgente|A) Entregar qualquer coisa so para ser rapido|B) Organizar informacoes e enviar resumo claro|C) Dizer que esta ocupado e nao responder";
-
 const char q10[] PROGMEM = "Brainstorm inesperado|A) Trazer ideias novas e diferentes|B) Ficar calado e copiar ideias dos outros|C) Criticar qualquer ideia sem sugerir nada";
 const char q11[] PROGMEM = "Desafio de inovacao rapida|A) Criar prototipo simples para testar|B) Recusar porque nao esta perfeito|C) Esperar outra pessoa comecar";
 const char q12[] PROGMEM = "Problema de design no material|A) Propor solucao alternativa|B) Ignorar e seguir com o problema|C) Culpar o time de marketing";
@@ -61,7 +75,6 @@ const char q16[] PROGMEM = "Evento anti etico: ignorar contribuicoes|A) Falar so
 const char q17[] PROGMEM = "Evento anti etico: exagerar inovacao|A) Inventar resultados que ainda nao existem|B) Comunicar com transparencia o que ja foi testado|C) Prometer algo que sabe que nao sera entregue";
 const char q18[] PROGMEM = "Workshop criativo|A) Participar ativamente e ouvir os outros|B) Olhar o celular o tempo todo|C) Zombar das ideias diferentes";
 const char q19[] PROGMEM = "Revisao de prototipo|A) Testar e ajustar com o time|B) Liberar sem revisar|C) Ignorar feedback de usuarios";
-
 const char q20[] PROGMEM = "Novo projeto urgente|A) Ajudar a organizar tarefas com o time|B) Fingir que nao viu a mensagem|C) Jogar todo o trabalho no estagiario";
 const char q21[] PROGMEM = "Solicitacao inesperada de cliente|A) Ver o que e possivel entregar com qualidade|B) Prometer tudo sem avaliar|C) Dizer que nao e problema seu";
 const char q22[] PROGMEM = "Prazo muito apertado|A) Priorizar atividades mais importantes|B) Atrasar o resto da equipe|C) Entregar qualquer coisa sem qualidade";
@@ -72,7 +85,6 @@ const char q26[] PROGMEM = "Evento anti etico: tomar credito indevido|A) Assumir
 const char q27[] PROGMEM = "Evento anti etico: pressionar equipe injustamente|A) Cobrar com respeito e combinar prazos|B) Amedrontar com ameaca de demissao|C) Ignorar limites de horario sempre";
 const char q28[] PROGMEM = "Treinamento interno voluntario|A) Participar e compartilhar conhecimento|B) Dizer que e perda de tempo|C) Ir mas ficar sem prestar atencao";
 const char q29[] PROGMEM = "Reuniao de planejamento rapido|A) Ajudar a organizar agenda e prioridades|B) Ficar calado e depois reclamar|C) Sabotar decisoes combinadas";
-
 const char q30[] PROGMEM = "Problema critico no codigo|A) Corrigir e documentar a solucao|B) Fazer um jeitinho rapido sem registrar|C) Culpar outro setor sem analisar";
 const char q31[] PROGMEM = "Atualizacao urgente de sistema|A) Testar antes de colocar em producao|B) Atualizar direto em producao sem teste|C) Ignorar pedido de atualizacao";
 const char q32[] PROGMEM = "Evento anti etico: manipular logs|A) Alterar registros para esconder erro|B) Registrar erro e corrigir com transparencia|C) Apagar qualquer evidencia do problema";
@@ -195,7 +207,7 @@ void setup() {
   Serial1.begin(9600);  // comunicacao com o Mega do controle
 
   uint16_t ID = tft.readID();
-  if (ID == 0xD3D3) ID = 0x9481;  // fallback comum
+  if (ID == 0xD3D3) ID = 0x9481; // fallback comum
   tft.begin(ID);
   tft.setRotation(1);
   tft.fillScreen(BLACK);
@@ -211,9 +223,17 @@ void setup() {
 
 // ---------- LOOP ----------
 void loop() {
+  // 1. Processar botões recebidos
   if (Serial1.available()) {
-    char c = (char)Serial1.read();   // 'U', 'D', 'O'
+    char c = (char)Serial1.read();
     handleButton(c);
+  }
+
+  // 2. Enviar Heartbeat periódico (PING)
+  // Envia "K" (Keep-alive) para manter a conexão ativa na Mão
+  if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
+    Serial1.println("K"); 
+    lastHeartbeat = millis();
   }
 }
 
@@ -222,12 +242,12 @@ void drawTitle() {
   tft.fillScreen(BLACK);
   tft.setTextSize(3);
   tft.setTextColor(YELLOW);
-  tft.setCursor(30, 40);
+  tft.setCursor(TITLE_X, TITLE_Y);
   tft.print("Simulador ESG");
 
   tft.setTextSize(2);
   tft.setTextColor(WHITE);
-  tft.setCursor(30, 90);
+  tft.setCursor(TITLE_X, SUBTITLE_Y);
   tft.print("Pressione OK para iniciar");
 
   state = STATE_SHOW_TITLE;
@@ -238,12 +258,12 @@ void drawSelectPlayers() {
   tft.fillScreen(BLACK);
   tft.setTextSize(2);
   tft.setTextColor(WHITE);
-  tft.setCursor(10, 20);
+  tft.setCursor(PADDING_X, 20);
   tft.print("Selecione quantidade");
-  tft.setCursor(10, 40);
+  tft.setCursor(PADDING_X, 40);
   tft.print("de jogadores (1 a 3)");
 
-  tft.setCursor(10, 80);
+  tft.setCursor(PADDING_X, 80);
   tft.print("UP/DOWN altera, OK confirma");
 
   drawSelectPlayersValue();
@@ -265,10 +285,13 @@ void drawSelectPlayersValue() {
 }
 
 void drawScores() {
-  tft.fillRect(0, 0, 320, 20, BLACK);
+  // Otimização: Não limpar tudo com fillRect para evitar piscar.
+  // Usar setTextColor(COR_FRENTE, COR_FUNDO) para sobreescrever
+  
+  tft.setCursor(0, SCORE_TEXT_Y);
   tft.setTextSize(2);
-  tft.setTextColor(WHITE);
-  tft.setCursor(0, 0);
+  tft.setTextColor(WHITE, BLACK);
+
   for (uint8_t i = 0; i < numPlayers; i++) {
     tft.print("J");
     tft.print(i + 1);
@@ -276,6 +299,8 @@ void drawScores() {
     tft.print(scores[i]);
     tft.print(" ");
   }
+  // Limpa resto da linha caso a pontuação diminua (improvável aqui, mas boa prática)
+  tft.print("   ");
 }
 
 void drawCharacters() {
@@ -284,21 +309,21 @@ void drawCharacters() {
 
   tft.setTextSize(2);
   tft.setTextColor(YELLOW);
-  tft.setCursor(10, 30);
+  tft.setCursor(PADDING_X, 30);
   tft.print("Personagens sorteados:");
 
   char buf[30];
   tft.setTextColor(WHITE);
   for (uint8_t p = 0; p < numPlayers; p++) {
     getProgmemString(personagemNomes, characters[p], buf, sizeof(buf));
-    tft.setCursor(10, 60 + p * 25);
+    tft.setCursor(PADDING_X, 60 + p * 25);
     tft.print("J");
     tft.print(p + 1);
     tft.print(": ");
     tft.print(buf);
   }
 
-  tft.setCursor(10, 60 + numPlayers * 25 + 10);
+  tft.setCursor(PADDING_X, 60 + numPlayers * 25 + 10);
   tft.print("Pressione OK para comecar");
 
   sendMode('C', 0, -1);
@@ -308,30 +333,31 @@ void drawQuestionText() {
   char buf[256];
   strcpy_P(buf, (PGM_P)pgm_read_word(&(perguntas[currentQuestionIndex])));
 
-  uint16_t y = 70;
+  uint16_t y = QUESTION_START_Y;
   tft.setTextSize(2);
 
   char* token = strtok(buf, "|");
   uint8_t line = 0;
 
   while (token != NULL && line < 4) {
-    tft.setCursor(5, y);
+    tft.setCursor(5, y); // Margem pequena para caber texto
     if (line == 0) {
-      // Texto da pergunta
-      tft.setTextColor(WHITE);
+      // Pergunta
+      tft.setTextColor(WHITE, BLACK);
       tft.print(token);
     } else {
-      uint8_t altIndex = line - 1;  // 0=A,1=B,2=C
+      // Alternativas
+      uint8_t altIndex = line - 1; // 0=A,1=B,2=C
       if (altIndex == selectedOption) {
-        tft.setTextColor(YELLOW);
+        tft.setTextColor(YELLOW, BLACK);
         tft.print(">");
       } else {
-        tft.setTextColor(WHITE);
+        tft.setTextColor(WHITE, BLACK);
         tft.print(" ");
       }
       tft.print(token);
     }
-    y += 50;  // Espaçamento bem maior entre alternativas
+    y += OPTION_SPACING;
     line++;
     token = strtok(NULL, "|");
   }
@@ -340,7 +366,7 @@ void drawQuestionText() {
 void drawQuestionScreen() {
   tft.fillScreen(BLACK);
   drawScores();
-
+  
   tft.setTextSize(2);
   tft.setTextColor(CYAN);
   tft.setCursor(5, 22);
@@ -354,7 +380,7 @@ void drawQuestionScreen() {
   tft.setTextColor(WHITE);
   tft.print("Vez do Jogador ");
   tft.print(currentPlayer + 1);
-
+  
   drawQuestionText();
 
   sendMode('Q', 0, -1);
@@ -365,7 +391,7 @@ void drawFeedback(bool acerto) {
   drawScores();
 
   tft.setTextSize(2);
-  tft.setCursor(10, 40);
+  tft.setCursor(PADDING_X, 40);
   if (acerto) {
     tft.setTextColor(GREEN);
     tft.print("Jogador ");
@@ -379,7 +405,7 @@ void drawFeedback(bool acerto) {
   }
 
   tft.setTextColor(WHITE);
-  tft.setCursor(10, 80);
+  tft.setCursor(PADDING_X, 80);
   tft.print("Pressione OK para continuar");
 
   sendMode('F', acerto ? 1 : 0, -1);
@@ -390,28 +416,28 @@ void drawRankPromotion() {
 
   tft.setTextSize(3);
   tft.setTextColor(YELLOW);
-  tft.setCursor(30, 30);
+  tft.setCursor(TITLE_X, 30);
   tft.print("PARABENS!");
 
   tft.setTextSize(2);
   tft.setTextColor(WHITE);
-  tft.setCursor(10, 80);
+  tft.setCursor(PADDING_X, 80);
   tft.print("Jogador ");
   tft.print(rankPlayer + 1);
   tft.print(" se tornou:");
 
   tft.setTextSize(3);
   tft.setTextColor(GREEN);
-  tft.setCursor(30, 120);
+  tft.setCursor(TITLE_X, 120);
   tft.print(getCargoName(newRank));
 
   tft.setTextSize(2);
   tft.setTextColor(WHITE);
-  tft.setCursor(10, 170);
+  tft.setCursor(PADDING_X, 170);
   tft.print("Pontuacao: ");
   tft.print(scores[rankPlayer]);
 
-  tft.setCursor(10, 200);
+  tft.setCursor(PADDING_X, 200);
   tft.print("Pressione OK");
 
   state = STATE_SHOW_RANK;
@@ -424,16 +450,22 @@ void drawWinner(uint8_t winner) {
 
   tft.setTextSize(3);
   tft.setTextColor(YELLOW);
-  tft.setCursor(10, 60);
+  tft.setCursor(PADDING_X, 50);
   tft.print("Jogador ");
   tft.print(winner + 1);
   tft.print(" venceu!");
 
+  // Exibir conquista final
   tft.setTextSize(2);
-  tft.setTextColor(WHITE);
-  tft.setCursor(10, 110);
-  tft.print("Pressione OK para reiniciar");
+  tft.setTextColor(GREEN, BLACK);
+  tft.setCursor(PADDING_X, 90);
+  tft.print("Novo Cargo: ");
+  tft.print(getCargoName(calculateRank(scores[winner])));
 
+  tft.setTextColor(WHITE, BLACK);
+  tft.setCursor(PADDING_X, 130);
+  tft.print("Pressione OK para reiniciar");
+  
   state = STATE_SHOW_WINNER;
   sendMode('W', 0, winner);
 }
@@ -455,7 +487,6 @@ void shuffleQuestions() {
 void sortCharacters() {
   uint8_t pool[8];
   for (uint8_t i = 0; i < 8; i++) pool[i] = i;
-
   for (int i = 7; i > 0; i--) {
     int j = random(i + 1);
     uint8_t tmp = pool[i];
@@ -494,7 +525,7 @@ void startNextQuestion() {
   }
 
   currentQuestionIndex = questionOrder[questionPos++];
-  currentPlayer = random(numPlayers);  // jogador aleatorio
+  currentPlayer = random(numPlayers); // jogador aleatorio
   selectedOption = 0;
 
   state = STATE_WAIT_ANSWER;

@@ -29,7 +29,7 @@ unsigned long lastDebounceMs = 0;
 const unsigned long DEBOUNCE_MS = 150;
 
 // Estado recebido do Arduino central
-char currentState = 'T';   // 'T','P','C','Q','F','W','R' (R = Rank/Cargo)
+char currentState = 'T'; // 'T','P','C','Q','F','W','R' (R = Rank/Cargo)
 uint8_t lastResult = 0;    // 0 = nada ou erro, 1 = acerto
 uint8_t numPlayers = 1;
 uint8_t currentPlayer = 0;
@@ -38,12 +38,17 @@ int8_t winnerIdx = -1;
 
 // Controle de cargos
 uint8_t lastRanks[MAX_PLAYERS] = {0, 0, 0};  // Ultimo cargo de cada jogador
-uint8_t newRank = 0;  // Novo cargo atingido
+uint8_t newRank = 0; // Novo cargo atingido
 uint8_t rankPlayer = 0;  // Jogador que atingiu novo cargo
 
 // Buffer de recepcao
 char lineBuf[64];
 uint8_t linePos = 0;
+
+// Sincronização e Timeout
+unsigned long lastRxTime = 0;
+const unsigned long CONNECTION_TIMEOUT = 4000; // 4 segundos sem sinal = desconectado
+bool isConnected = true;
 
 // Prototipos
 void readButtons();
@@ -59,20 +64,43 @@ void setup() {
   pinMode(BTN_DOWN, INPUT_PULLUP);
   pinMode(BTN_OK,   INPUT_PULLUP);
 
-  Serial1.begin(9600);   // ligado ao Arduino do predio
+  Serial1.begin(9600); // ligado ao Arduino do predio
 
   uint16_t ID = tft.readID();
-  if (ID == 0xD3D3) ID = 0x9481;  // fallback comum
+  if (ID == 0xD3D3) ID = 0x9481; // fallback comum
   tft.begin(ID);
   tft.setRotation(1);
   tft.fillScreen(BLACK);
 
   drawScreen();
+  lastRxTime = millis(); // Assume conectado ao iniciar
 }
 
 void loop() {
   readButtons();
   readCentralMessages();
+
+  // VERIFICAÇÃO DE CONEXÃO
+  if (millis() - lastRxTime > CONNECTION_TIMEOUT) {
+    if (isConnected) {
+      isConnected = false;
+      // Tela de espera por conexão
+      tft.fillScreen(BLACK);
+      tft.setCursor(10, 100);
+      tft.setTextSize(2);
+      tft.setTextColor(RED, BLACK);
+      tft.print("Sem sinal do Predio...");
+      tft.setCursor(10, 130);
+      tft.setTextColor(WHITE, BLACK);
+      tft.print("A aguardar...");
+    }
+  } else {
+    // Se voltou a ter sinal após falha, redesenha
+    if (!isConnected) {
+      isConnected = true;
+      drawScreen(); 
+    }
+  }
 }
 
 void readButtons() {
@@ -103,6 +131,10 @@ void readButtons() {
 void readCentralMessages() {
   while (Serial1.available()) {
     char c = (char)Serial1.read();
+    
+    // Recebemos dados, atualiza timestamp de conexão
+    lastRxTime = millis(); 
+
     if (c == '\n' || c == '\r') {
       if (linePos > 0) {
         lineBuf[linePos] = '\0';
@@ -110,8 +142,12 @@ void readCentralMessages() {
         linePos = 0;
       }
     } else {
+      // Proteção de Buffer
       if (linePos < sizeof(lineBuf) - 1) {
         lineBuf[linePos++] = c;
+      } else {
+        // Buffer overflow: descartar dados corrompidos
+        linePos = 0;
       }
     }
   }
@@ -139,6 +175,9 @@ const char* getCargoName(uint8_t rank) {
 }
 
 void parseLine(char *s) {
+  // Ignorar pings ("K")
+  if (s[0] == 'K') return;
+
   // Espera formato: M,estado,lastResult,numPlayers,currentPlayer,s1,s2,s3,winner
   // ou R,player,rank para notificacao de cargo
   
@@ -152,7 +191,7 @@ void parseLine(char *s) {
     token = strtok(NULL, ",");
     if (!token) return;
     newRank = (uint8_t)atoi(token);
-    
+
     currentState = 'R';
     drawScreen();
     return;
@@ -160,11 +199,15 @@ void parseLine(char *s) {
   
   if (s[0] != 'M') return;
 
-  char *token = strtok(s, ",");
-  // token == "M"
+  char *token = strtok(s, ","); // "M"
+  
   token = strtok(NULL, ",");
   if (!token) return;
-  currentState = token[0];
+  char newState = token[0];
+
+  // Otimização: Só redesenha se algo mudou significativamente,
+  // mas aqui redesenhamos sempre para garantir consistência
+  currentState = newState;
 
   token = strtok(NULL, ",");
   if (!token) return;
@@ -202,10 +245,11 @@ void parseLine(char *s) {
 }
 
 void drawScores() {
-  tft.fillRect(0, 0, 320, 20, BLACK);
-  tft.setTextSize(2);
-  tft.setTextColor(WHITE);
+  // Otimização: Texto com fundo preto para evitar piscar
   tft.setCursor(0, 0);
+  tft.setTextSize(2);
+  tft.setTextColor(WHITE, BLACK);
+
   for (uint8_t i = 0; i < numPlayers; i++) {
     tft.print("J");
     tft.print(i + 1);
@@ -213,6 +257,7 @@ void drawScores() {
     tft.print(scores[i]);
     tft.print(" ");
   }
+  tft.print("   "); // Limpa sufixo
 }
 
 void drawScreen() {
