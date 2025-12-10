@@ -1,10 +1,10 @@
-// Código Unificado: Arduino Mega (Lógica do Prédio + Leitura da Mão)
-// Usa uma única tela LCD e botões para controlar o jogo.
+// Código Unificado: Arduino Mega (Lógica do Jogo + Interface)
+// Hardware: 1x Arduino Mega, 1x TFT Touch Shield, 3x Botões Físicos
 
 #include <MCUFRIEND_kbv.h>
 #include <avr/pgmspace.h>
 #include <string.h>
-#include <stdlib.h> // Necessário para atoi (embora menos usado agora)
+#include <stdlib.h>
 
 MCUFRIEND_kbv tft;
 
@@ -26,13 +26,15 @@ const int TITLE_Y = 40;
 const int SUBTITLE_Y = 90;
 const int SCORE_TEXT_Y = 0;
 const int QUESTION_START_Y = 70;
-const int OPTION_SPACING = 50; // Espaçamento maior entre alternativas
+const int OPTION_SPACING = 50;
 
-// --- PINOS E DEBOUNCE DOS BOTOES (do código da Mão) ---
+// --- PINOS DOS BOTOES ---
+// Use os pinos digitais disponíveis no Arduino Mega (lateral do shield)
 const int BTN_UP = 31;
 const int BTN_DOWN = 33;
 const int BTN_OK = 35;
 
+// Variáveis de estado dos botões (Debounce)
 bool lastUp = HIGH;
 bool lastDown = HIGH;
 bool lastOk = HIGH;
@@ -46,10 +48,6 @@ const unsigned long DEBOUNCE_MS = 150;
 #define PONTOS_ACERTO 5
 #define PONTOS_VITORIA 50
 #define INTERVALO_EVENTO_MS (5UL * 60UL * 1000UL) // 5 minutos
-
-// Variaveis de Heartbeat (Não é mais usado para comunicação serial, mas mantido para referência)
-unsigned long lastHeartbeat = 0;
-const unsigned long HEARTBEAT_INTERVAL = 2000;
 
 // ---------- PERSONAGENS (somente nomes, em PROGMEM) ----------
 const char pn0[] PROGMEM = "Mr Ducks";
@@ -65,7 +63,6 @@ const char *const personagemNomes[] PROGMEM = {
     pn0, pn1, pn2, pn3, pn4, pn5, pn6, pn7};
 
 // ---------- PERGUNTAS (35) EM PROGMEM ----------
-// Formato: "Pergunta|A) ...|B) ...|C) ..."
 const char q0[] PROGMEM = "Reuniao de alinhamento inesperada|A) Explicar rapidamente os pontos principais|B) Preparar apresentacao detalhada e longa|C) Deixar o colega da esquerda falar sozinho";
 const char q1[] PROGMEM = "Email de cliente confuso|A) Responder de forma educada e clara|B) Ignorar ate alguem reclamar|C) Responder com irritacao";
 const char q2[] PROGMEM = "Conflito interno sobre prioridades|A) Mediar conversa buscando acordo|B) Forcar sua ideia sem ouvir ninguem|C) Sair da discussao e deixar rolar";
@@ -76,7 +73,6 @@ const char q6[] PROGMEM = "Feedback ambiguo do gerente|A) Perguntar o que exatam
 const char q7[] PROGMEM = "Apresentacao que deu errado|A) Refazer destacando resultados e aprendizados|B) Culpar a equipe em publico|C) Esconder os erros nos proximos relatorios";
 const char q8[] PROGMEM = "Desalinhamento entre times|A) Marcar chamada rapida com todos|B) Deixar cada time trabalhar isolado|C) Mandar email passivo agressivo";
 const char q9[] PROGMEM = "Cliente pede detalhamento urgente|A) Entregar qualquer coisa so para ser rapido|B) Organizar informacoes e enviar resumo claro|C) Dizer que esta ocupado e nao responder";
-
 const char q10[] PROGMEM = "Brainstorm inesperado|A) Trazer ideias novas e diferentes|B) Ficar calado e copiar ideias dos outros|C) Criticar qualquer ideia sem sugerir nada";
 const char q11[] PROGMEM = "Desafio de inovacao rapida|A) Criar prototipo simples para testar|B) Recusar porque nao esta perfeito|C) Esperar outra pessoa comecar";
 const char q12[] PROGMEM = "Problema de design no material|A) Propor solucao alternativa|B) Ignorar e seguir com o problema|C) Culpar o time de marketing";
@@ -87,7 +83,6 @@ const char q16[] PROGMEM = "Evento anti etico: ignorar contribuicoes|A) Falar so
 const char q17[] PROGMEM = "Evento anti etico: exagerar inovacao|A) Inventar resultados que ainda nao existem|B) Comunicar com transparencia o que ja foi testado|C) Prometer algo que sabe que nao sera entregue";
 const char q18[] PROGMEM = "Workshop criativo|A) Participar ativamente e ouvir os outros|B) Olhar o celular o tempo todo|C) Zombar das ideias diferentes";
 const char q19[] PROGMEM = "Revisao de prototipo|A) Testar e ajustar com o time|B) Liberar sem revisar|C) Ignorar feedback de usuarios";
-
 const char q20[] PROGMEM = "Novo projeto urgente|A) Ajudar a organizar tarefas com o time|B) Fingir que nao viu a mensagem|C) Jogar todo o trabalho no estagiario";
 const char q21[] PROGMEM = "Solicitacao inesperada de cliente|A) Ver o que e possivel entregar com qualidade|B) Prometer tudo sem avaliar|C) Dizer que nao e problema seu";
 const char q22[] PROGMEM = "Prazo muito apertado|A) Priorizar atividades mais importantes|B) Atrasar o resto da equipe|C) Entregar qualquer coisa sem qualidade";
@@ -98,7 +93,6 @@ const char q26[] PROGMEM = "Evento anti etico: tomar credito indevido|A) Assumir
 const char q27[] PROGMEM = "Evento anti etico: pressionar equipe injustamente|A) Cobrar com respeito e combinar prazos|B) Amedrontar com ameaca de demissao|C) Ignorar limites de horario sempre";
 const char q28[] PROGMEM = "Treinamento interno voluntario|A) Participar e compartilhar conhecimento|B) Dizer que e perda de tempo|C) Ir mas ficar sem prestar atencao";
 const char q29[] PROGMEM = "Reuniao de planejamento rapido|A) Ajudar a organizar agenda e prioridades|B) Ficar calado e depois reclamar|C) Sabotar decisoes combinadas";
-
 const char q30[] PROGMEM = "Problema critico no codigo|A) Corrigir e documentar a solucao|B) Fazer um jeitinho rapido sem registrar|C) Culpar outro setor sem analisar";
 const char q31[] PROGMEM = "Atualizacao urgente de sistema|A) Testar antes de colocar em producao|B) Atualizar direto em producao sem teste|C) Ignorar pedido de atualizacao";
 const char q32[] PROGMEM = "Evento anti etico: manipular logs|A) Alterar registros para esconder erro|B) Registrar erro e corrigir com transparencia|C) Apagar qualquer evidencia do problema";
@@ -113,14 +107,11 @@ const char *const perguntas[NUM_QUESTOES] PROGMEM = {
 
 // Resposta correta de cada pergunta (0=A, 1=B, 2=C)
 const uint8_t respostasCorretas[NUM_QUESTOES] PROGMEM = {
-    // 0-9
-    0, 0, 0, 1, 0, 1, 0, 0, 0, 1,
-    // 10-19
-    0, 0, 0, 0, 0, 1, 1, 1, 0, 0,
-    // 20-29
-    0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
-    // 30-34
-    0, 0, 1, 1, 0};
+    0, 0, 0, 1, 0, 1, 0, 0, 0, 1, // 0-9
+    0, 0, 0, 0, 0, 1, 1, 1, 0, 0, // 10-19
+    0, 0, 0, 0, 0, 1, 1, 0, 0, 0, // 20-29
+    0, 0, 1, 1, 0                 // 30-34
+};
 
 // ---------- ESTADO DO JOGO ----------
 enum GameState
@@ -168,12 +159,12 @@ void drawQuestionText();
 void drawFeedback(bool acerto);
 void drawRankPromotion();
 void drawWinner(uint8_t winner);
-void handleButton(char c); // Agora processa o char c
+void handleButton(char c);
 uint8_t findHighestScorePlayer();
 uint8_t calculateRank(uint8_t score);
 const char *getCargoName(uint8_t rank);
 bool checkRankPromotion(uint8_t player);
-void readButtons(); // Função da Mão para ler botões físicos
+void readButtons();
 
 // ---------- FUNCOES AUXILIARES ----------
 void getProgmemString(const char *const *table, uint8_t index, char *dest, size_t len)
@@ -234,8 +225,6 @@ bool checkRankPromotion(uint8_t player)
 // ---------- SETUP ----------
 void setup()
 {
-  Serial.begin(9600); // opcional debug
-
   // Configuração dos Pinos dos Botões
   pinMode(BTN_UP, INPUT_PULLUP);
   pinMode(BTN_DOWN, INPUT_PULLUP);
@@ -260,18 +249,11 @@ void setup()
 // ---------- LOOP ----------
 void loop()
 {
-  // Substitui a leitura Serial1 pela leitura direta dos botões
+  // Loop limpo: apenas verifica os botões
   readButtons();
-
-  // O heartbeat (Serial1) não é mais necessário, mas mantemos o ciclo para não travar
-  if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL)
-  {
-    // Código removido: Serial1.println("K");
-    lastHeartbeat = millis();
-  }
 }
 
-// Função da Mão integrada: Lê os botões físicos e chama a lógica de estado (handleButton)
+// Função integrada de leitura dos botões físicos
 void readButtons()
 {
   unsigned long now = millis();
@@ -346,11 +328,6 @@ void drawSelectPlayersValue()
   tft.setTextColor(YELLOW);
   tft.setCursor(140, 125);
   tft.print(numPlayers);
-
-  if (state == STATE_SELECT_PLAYERS)
-  {
-    // sendMode removido, mas mantemos a chamada para redesenho
-  }
 }
 
 void drawScores()
@@ -394,8 +371,6 @@ void drawCharacters()
 
   tft.setCursor(PADDING_X, 60 + numPlayers * LINE_HEIGHT + 10);
   tft.print("Pressione OK para comecar");
-
-  // sendMode removido
 }
 
 void drawQuestionText()
@@ -464,7 +439,7 @@ void drawQuestionScreen()
 
   drawQuestionText();
 
-  state = STATE_WAIT_ANSWER; // Garante o estado correto
+  state = STATE_WAIT_ANSWER;
 }
 
 void drawFeedback(bool acerto)
@@ -493,7 +468,7 @@ void drawFeedback(bool acerto)
   tft.setCursor(PADDING_X, 80);
   tft.print("Pressione OK para continuar");
 
-  state = STATE_SHOW_FEEDBACK; // Garante o estado correto
+  state = STATE_SHOW_FEEDBACK;
 }
 
 void drawRankPromotion()
@@ -555,7 +530,7 @@ void drawWinner(uint8_t winner)
   state = STATE_SHOW_WINNER;
 }
 
-// ---------- LOGICA DO JOGO (STARTNEXTQUESTION com ordem cíclica) ----------
+// ---------- LOGICA DO JOGO ----------
 void shuffleQuestions()
 {
   for (uint8_t i = 0; i < NUM_QUESTOES; i++)
@@ -624,7 +599,6 @@ void startNextQuestion()
   }
 
   currentQuestionIndex = questionOrder[questionPos];
-
   // Ordem Cíclica: Garante que J1 (índice 0) comece e todos joguem igualmente
   currentPlayer = questionPos % numPlayers;
 
@@ -687,12 +661,12 @@ void handleButton(char c)
         selectedOption = 2;
       else
         selectedOption--;
-      drawQuestionScreen(); // Redesenha para mostrar a seleção
+      drawQuestionScreen();
     }
     else if (c == 'D')
     {
       selectedOption = (selectedOption + 1) % 3;
-      drawQuestionScreen(); // Redesenha para mostrar a seleção
+      drawQuestionScreen();
     }
     else if (c == 'O')
     {
